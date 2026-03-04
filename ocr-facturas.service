@@ -1,0 +1,16 @@
+[Unit]
+Description=OCR Processor de Facturas
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/srv/facturas
+ExecStart=/usr/bin/python3 /srv/facturas/ocr_processor.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema de Facturas OCR</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<style>
+  :root {
+    --bg:      #0a0f1e;
+    --card:    #111827;
+    --border:  #1f2937;
+    --accent:  #3b82f6;
+    --accent2: #6366f1;
+    --green:   #10b981;
+    --yellow:  #f59e0b;
+    --red:     #ef4444;
+    --text:    #f1f5f9;
+    --muted:   #94a3b8;
+    --radius:  12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Inter", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 70px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(10px);
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 1.2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .logo i { font-size: 1.5rem; -webkit-text-fill-color: #3b82f6; }
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+  .btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all .2s;
+    text-decoration: none;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff;
+  }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(59,130,246,.4); }
+  .btn-ghost {
+    background: rgba(255,255,255,.06);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,.1); color: var(--text); }
+
+  /* ── Layout ── */
+  main { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+
+  /* ── Stats Cards ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.2rem;
+    margin-bottom: 2rem;
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.4rem;
+    position: relative;
+    overflow: hidden;
+    transition: transform .2s;
+  }
+  .stat-card:hover { transform: translateY(-3px); }
+  .stat-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--accent-color, var(--accent));
+  }
+  .stat-icon {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    margin-bottom: 12px;
+    background: var(--icon-bg, rgba(59,130,246,.15));
+    color: var(--accent-color, var(--accent));
+  }
+  .stat-value { font-size: 1.8rem; font-weight: 700; line-height: 1; }
+  .stat-label { font-size: 0.8rem; color: var(--muted); margin-top: 4px; font-weight: 400; }
+
+  /* ── Search & Filter bar ── */
+  .toolbar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 1.4rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .search-box {
+    flex: 1;
+    min-width: 250px;
+    position: relative;
+  }
+  .search-box i {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+  }
+  .search-box input {
+    width: 100%;
+    padding: 9px 12px 9px 36px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .search-box input:focus { border-color: var(--accent); }
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  /* ── Table ── */
+  .table-container {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead tr { background: rgba(255,255,255,.03); border-bottom: 1px solid var(--border); }
+  th {
+    padding: 14px 16px;
+    text-align: left;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  th:hover { color: var(--text); }
+  th .sort-icon { margin-left: 4px; font-size: .65rem; }
+  tbody tr {
+    border-bottom: 1px solid rgba(255,255,255,.04);
+    transition: background .15s;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,.04); }
+  td { padding: 13px 16px; font-size: 0.88rem; vertical-align: middle; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-size: 0.78rem;
+    font-weight: 500;
+  }
+  .badge-num {
+    background: rgba(59,130,246,.15);
+    color: #60a5fa;
+  }
+  .monto { font-weight: 600; color: var(--green); font-variant-numeric: tabular-nums; }
+  .archivo-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 0.82rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .archivo-link:hover { text-decoration: underline; }
+  .proveedor { font-weight: 500; }
+  .fecha-cell { color: var(--muted); font-size: 0.83rem; }
+  .procesado-cell { color: var(--muted); font-size: 0.78rem; }
+  .empty-state {
+    padding: 60px;
+    text-align: center;
+    color: var(--muted);
+  }
+  .empty-state i { font-size: 3rem; margin-bottom: 12px; display: block; opacity: .3; }
+
+  /* ── Log Panel ── */
+  .log-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-top: 1.5rem;
+    overflow: hidden;
+  }
+  .log-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .log-body {
+    background: #080d1a;
+    padding: 16px;
+    font-family: "Courier New", monospace;
+    font-size: 0.78rem;
+    height: 180px;
+    overflow-y: auto;
+    color: #64fc80;
+    line-height: 1.6;
+  }
+  .log-line { opacity: .85; }
+  .log-line.error { color: #f87171; }
+  .log-line.warning { color: #fbbf24; }
+
+  /* ── Status pulse ── */
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    main { padding: 1rem; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    table { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <i class="fa-solid fa-file-invoice-dollar"></i>
+    Sistema de Facturas OCR
+  </div>
+  <div class="header-actions">
+    <div class="status-dot" title="OCR Service Running"></div>
+    <a href="/descargar/excel" class="btn btn-primary" id="download-excel">
+      <i class="fa-solid fa-file-excel"></i>
+      Descargar Excel
+    </a>
+    <button class="btn btn-ghost" onclick="refreshData()" id="refresh-btn">
+      <i class="fa-solid fa-rotate-right"></i>
+      Actualizar
+    </button>
+  </div>
+</header>
+
+<main>
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card" style="--accent-color: #3b82f6; --icon-bg: rgba(59,130,246,.12)">
+      <div class="stat-icon"><i class="fa-solid fa-file-invoice"></i></div>
+      <div class="stat-value" id="stat-total">{{ stats.total_facturas }}</div>
+      <div class="stat-label">Total Facturas</div>
+    </div>
+    <div class="stat-card" style="--accent-color: #10b981; --icon-bg: rgba(16,185,129,.12)">
+      <div class="stat-icon"><i class="fa-solid fa-circle-dollar-to-slot"></i></div>
+      <div class="stat-value" id="stat-monto">${{ "{:,.0f}".format(stats.monto_total) }}</div>
+      <div class="stat-label">Monto Total Acumulado</div>
+    </div>
+    <div class="stat-card" style="--accent-color: #f59e0b; --icon-bg: rgba(245,158,11,.12)">
+      <div class="stat-icon"><i class="fa-solid fa-chart-line"></i></div>
+      <div class="stat-value" id="stat-promedio">${{ "{:,.0f}".format(stats.monto_promedio) }}</div>
+      <div class="stat-label">Promedio por Factura</div>
+    </div>
+    <div class="stat-card" style="--accent-color: #8b5cf6; --icon-bg: rgba(139,92,246,.12)">
+      <div class="stat-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+      <div class="stat-value" id="stat-ultimo" style="font-size:1rem; font-weight:500; margin-top:6px">{{ stats.ultimo_escaneo }}</div>
+      <div class="stat-label">Último Escaneo</div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="toolbar">
+    <div class="section-title">
+      <i class="fa-solid fa-table-list"></i>
+      Facturas Procesadas
+    </div>
+    <div class="search-box">
+      <i class="fa-solid fa-search"></i>
+      <input type="text" id="search-input" placeholder="Buscar por proveedor, número, fecha..." oninput="filterTable()">
+    </div>
+  </div>
+
+  <div class="table-container">
+    <table id="facturas-table">
+      <thead>
+        <tr>
+          <th onclick="sortTable(0)">N° Factura <span class="sort-icon">⇅</span></th>
+          <th onclick="sortTable(1)">Fecha <span class="sort-icon">⇅</span></th>
+          <th onclick="sortTable(2)">Proveedor <span class="sort-icon">⇅</span></th>
+          <th onclick="sortTable(3)">Monto Total <span class="sort-icon">⇅</span></th>
+          <th onclick="sortTable(4)">Archivo</th>
+          <th onclick="sortTable(5)">Procesado <span class="sort-icon">⇅</span></th>
+        </tr>
+      </thead>
+      <tbody id="table-body">
+        {% if facturas %}
+          {% for f in facturas %}
+          <tr>
+            <td><span class="badge badge-num"><i class="fa-solid fa-hashtag" style="font-size:.65rem"></i>{{ f.numero }}</span></td>
+            <td class="fecha-cell">{{ f.fecha }}</td>
+            <td class="proveedor">{{ f.proveedor }}</td>
+            <td class="monto">{% if f.total %}${{ "{:,.2f}".format(f.total) }}{% else %}-{% endif %}</td>
+            <td>
+              {% if f.archivo %}
+              <a class="archivo-link" href="/ver/{{ f.archivo }}" target="_blank">
+                <i class="fa-solid fa-eye"></i>{{ f.archivo[:35] }}{% if f.archivo|length > 35 %}…{% endif %}
+              </a>
+              {% else %}-{% endif %}
+            </td>
+            <td class="procesado-cell">{{ f.procesado }}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <i class="fa-solid fa-inbox"></i>
+                <p>No hay facturas procesadas aún.</p>
+                <p style="font-size:.82rem;margin-top:6px">Los documentos escaneados aparecerán aquí automáticamente.</p>
+              </div>
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Log Panel -->
+  <div class="log-panel">
+    <div class="log-header">
+      <div class="section-title">
+        <div class="status-dot"></div>
+        Log OCR en tiempo real
+      </div>
+      <button class="btn btn-ghost" onclick="loadLogs()" style="padding:5px 12px; font-size:.78rem">
+        <i class="fa-solid fa-refresh"></i> Actualizar
+      </button>
+    </div>
+    <div class="log-body" id="log-output">
+      <div class="log-line">Cargando logs...</div>
+    </div>
+  </div>
+</main>
+
+<script>
+let sortDir = {};
+
+function filterTable() {
+  const q = document.getElementById("search-input").value.toLowerCase();
+  document.querySelectorAll("#table-body tr").forEach(row => {
+    row.style.display = row.innerText.toLowerCase().includes(q) ? "" : "none";
+  });
+}
+
+function sortTable(col) {
+  const tbody = document.getElementById("table-body");
+  const rows = Array.from(tbody.querySelectorAll("tr"));
+  sortDir[col] = !sortDir[col];
+  rows.sort((a, b) => {
+    const av = a.cells[col]?.innerText.trim() || "";
+    const bv = b.cells[col]?.innerText.trim() || "";
+    const na = parseFloat(av.replace(/[$,]/g, "")), nb = parseFloat(bv.replace(/[$,]/g, ""));
+    if (!isNaN(na) && !isNaN(nb)) return sortDir[col] ? na - nb : nb - na;
+    return sortDir[col] ? av.localeCompare(bv) : bv.localeCompare(av);
+  });
+  rows.forEach(r => tbody.appendChild(r));
+}
+
+function loadLogs() {
+  fetch("/logs")
+    .then(r => r.json())
+    .then(data => {
+      const el = document.getElementById("log-output");
+      el.innerHTML = data.lines.map(line => {
+        let cls = "log-line";
+        if (line.includes("ERROR")) cls += " error";
+        else if (line.includes("WARNING")) cls += " warning";
+        return `<div class="${cls}">${escHtml(line)}</div>`;
+      }).join("") || '<div class="log-line">Sin logs disponibles.</div>';
+      el.scrollTop = el.scrollHeight;
+    });
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function refreshData() {
+  const btn = document.getElementById("refresh-btn");
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Actualizando';
+  setTimeout(() => location.reload(), 500);
+}
+
+// Iniciar al cargar
+loadLogs();
+setInterval(loadLogs, 15000);  // Actualizar logs cada 15s
+</script>
+</body>
+</html>

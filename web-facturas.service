@@ -1,0 +1,16 @@
+[Unit]
+Description=Web App Facturas OCR
+After=network.target ocr-facturas.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/srv/facturas/web
+ExecStart=/usr/bin/python3 /srv/facturas/web/app.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
