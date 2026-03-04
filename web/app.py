@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, render_template, send_file, jsonify, request, abort
+import shutil
 import openpyxl
 
 app = Flask(__name__)
@@ -104,6 +105,28 @@ def ver_logs():
     with open(LOG_PATH, "r") as f:
         lines = f.readlines()
     return jsonify({"lines": [l.rstrip() for l in lines[-100:]]})
+
+
+@app.route("/api/eliminar/<int:row_index>", methods=["DELETE"])
+def eliminar_factura(row_index):
+    """Elimina una factura del Excel por índice de fila (0-based, sin contar encabezado)."""
+    if not EXCEL_PATH.exists():
+        abort(404)
+    try:
+        wb = openpyxl.load_workbook(EXCEL_PATH)
+        ws = wb.active
+        # row_index 0 = primera fila de datos = fila 2 en Excel (fila 1 es encabezado)
+        excel_row = row_index + 2
+        if excel_row > ws.max_row:
+            abort(404)
+        ws.delete_rows(excel_row)
+        # Backup antes de guardar
+        bak = str(EXCEL_PATH) + ".bak"
+        shutil.copy2(str(EXCEL_PATH), bak)
+        wb.save(EXCEL_PATH)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 if __name__ == "__main__":

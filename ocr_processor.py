@@ -135,12 +135,13 @@ def pdf_to_text(pdf_path: Path) -> str:
 def extract_invoice_number(text: str) -> str:
     """Extrae número de factura del texto OCR."""
     patterns = [
-        r"[Ff]actura\s*[Nn]°?\s*[:\-]?\s*([A-Z0-9]{1,5}-?\d{4,10})",
-        r"[Ff]actura\s*[Nn]°?\s*[:\-]?\s*(\d{4,12})",
-        r"N°?\s*[Ff]actura\s*[:\-]?\s*([A-Z0-9\-]{4,15})",
-        r"[Ii]nvoice\s*[Nn]o\.?\s*[:\-]?\s*(\w{4,15})",
-        r"FACTURA\s+N[°O]?\s*[:\-]?\s*([A-Z0-9\-]{4,15})",
-        r"N°?\s*[:\-]?\s*(\d{4,10})",
+        r"FACTURA\s+ELECTR[OÓ]NICA[\s\S]{1,100}?N[°º2\s]*[:\-]?\s*(\d{2,12})",
+        r"[Ff]actura\s*[Nn]°?\s*[:\-]?\s*([A-Z0-9]{1,5}-?\d{2,10})",
+        r"[Ff]actura\s*[Nn]°?\s*[:\-]?\s*(\d{2,12})",
+        r"N°?\s*[Ff]actura\s*[:\-]?\s*([A-Z0-9\-]{2,15})",
+        r"[Ii]nvoice\s*[Nn]o\.?\s*[:\-]?\s*(\w{2,15})",
+        r"FACTURA\s+N[°O]?\s*[:\-]?\s*([A-Z0-9\-]{2,15})",
+        r"N[°º2]?\s*[:\-]?\s*(\d{2,10})\b",
     ]
     for pattern in patterns:
         m = re.search(pattern, text)
@@ -165,18 +166,29 @@ def extract_date(text: str) -> str:
 
 
 def extract_supplier(text: str) -> str:
-    """Extrae nombre del proveedor."""
+    """Extrae nombre del proveedor (Emisor o Señor(es))."""
+    
+    # Prioridad 1: Formato DTE Chile (Nombre del Emisor justo antes de su RUT)
+    m = re.search(r"([\s\S]{5,100}?)\s+RUT\s*:\s*\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]", text, re.IGNORECASE)
+    if m:
+        name = m.group(1).replace("\n", " ").strip()
+        if len(name) > 3:
+            return name[:60]
+
+    # Prioridad 2: Buscar a quién se emitió (Señor(es)) o clásico Proveedor
     patterns = [
-        r"[Pp]roveedor\s*[:\-]?\s*(.{5,60})",
-        r"[Ee]mpresa\s*[:\-]?\s*(.{5,60})",
-        r"[Rr]azón\s+[Ss]ocial\s*[:\-]?\s*(.{5,60})",
-        r"[Ss]upplier\s*[:\-]?\s*(.{5,60})",
+        r"Señor(?:\(es\))?\s*[:\-]?\s*(.+?)(?:\s+Fecha|\n)",
+        r"Señores\s*[:\-]?\s*(.+?)(?:\s+Fecha|\n)",
+        r"[Pp]roveedor\s*[:\-]?\s*(.+?)\n",
+        r"[Ee]mpresa\s*[:\-]?\s*(.+?)\n",
+        r"[Rr]azón\s+[Ss]ocial\s*[:\-]?\s*(.+?)\n",
+        r"[Ss]upplier\s*[:\-]?\s*(.+?)\n",
         r"^([A-Z][A-ZÁÉÍÓÚ\s]{5,50}(?:S\.?A\.?|LTDA\.?|SpA|E\.?I\.?R\.?L\.?))",
     ]
     for pattern in patterns:
         m = re.search(pattern, text, re.MULTILINE)
         if m:
-            name = m.group(1).strip().split("\n")[0].strip()
+            name = m.group(1).strip()
             if len(name) > 3:
                 return name[:60]
     return "PROVEEDOR DESCONOCIDO"
@@ -211,6 +223,11 @@ def extract_total(text: str) -> float:
 # ── Procesar archivo ──────────────────────────────────────────────────────────
 def process_file(src_path: Path):
     """Procesa un archivo escaneado: OCR, renombra, actualiza Excel."""
+    # Ignorar archivos ocultos de macOS
+    if src_path.name.startswith("._") or src_path.name in [".DS_Store", "desktop.ini"]:
+        log.debug(f"Ignorando archivo del sistema: {src_path.name}")
+        return
+
     suffix = src_path.suffix.lower()
     if suffix not in [".pdf", ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp"]:
         log.warning(f"Formato no soportado: {src_path.name}")
@@ -260,22 +277,47 @@ def process_file(src_path: Path):
 
 
 # ── Watchdog Handler ──────────────────────────────────────────────────────────
+def wait_for_file_ready(path: Path, stable_secs: int = 3, timeout: int = 120) -> bool:
+    """
+    Espera hasta que el archivo deje de crecer (copia de red completada).
+    Comprueba el tamaño cada segundo; si permanece igual por `stable_secs`
+    segundos consecutivos, considera que la copia terminó.
+    Retorna False si supera timeout sin estabilizarse.
+    """
+    prev_size = -1
+    stable_count = 0
+    waited = 0
+    while waited < timeout:
+        try:
+            curr_size = path.stat().st_size
+        except FileNotFoundError:
+            return False
+        if curr_size == prev_size and curr_size > 0:
+            stable_count += 1
+            if stable_count >= stable_secs:
+                return True
+        else:
+            stable_count = 0
+        prev_size = curr_size
+        time.sleep(1)
+        waited += 1
+    log.warning(f"Timeout esperando que termine la copia de {path.name}")
+    return False
+
+
 class InvoiceHandler(FileSystemEventHandler):
     def on_created(self, event):
         if event.is_directory:
             return
         path = Path(event.src_path)
-        # Esperar a que el archivo esté completamente escrito
-        time.sleep(2)
-        if path.exists():
+        if wait_for_file_ready(path):
             process_file(path)
 
     def on_moved(self, event):
         if event.is_directory:
             return
         path = Path(event.dest_path)
-        time.sleep(1)
-        if path.exists():
+        if wait_for_file_ready(path):
             process_file(path)
 
 
